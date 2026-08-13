@@ -1,0 +1,6 @@
+services:
+  clanky-cat:
+    build: .
+    container_name: clanky-cat
+    env_file: .env
+    restart: unless-stopped

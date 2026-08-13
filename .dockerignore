@@ -1,0 +1,10 @@
+.git
+.venv
+.env
+__pycache__
+**/__pycache__
+*.pyc
+.gitignore
+README.md
+start.ps1
+start.bat

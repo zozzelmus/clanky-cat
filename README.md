@@ -55,11 +55,24 @@ track, channels) are left untouched, as are messages the bot can't resolve
 
 4. **Install & run**
 
+   Windows, no Docker — `start.bat` (or `start.ps1`) creates the venv,
+   installs dependencies, and starts the bot. Or manually:
+
    ```
    python -m venv .venv
    .venv\Scripts\activate
    pip install -r requirements.txt
    python -m clanky_cat
+   ```
+
+   Docker — the container reads its config from `.env` at runtime (the
+   file is never baked into the image) and restarts automatically unless
+   stopped:
+
+   ```
+   docker compose up -d --build
+   docker compose logs -f   # watch it log in
+   docker compose down      # stop
    ```
 
 ## Project layout
