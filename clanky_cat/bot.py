@@ -1,8 +1,9 @@
-"""Clanky Cat — Discord bot that swaps music links for a cross-platform embed.
+"""Clanky Cat — Discord bot that adds a cross-platform embed to music links.
 
 Watches one channel. When a message contains a song link recognized by any
-registered platform, the original message is deleted and replaced with an
-embed listing the song on every platform (NOT FOUND where no match).
+registered platform, the bot replies to it with an embed listing the song on
+every platform (NOT FOUND where no match). The reply is seeded with 👍/👎
+reactions so users can give feedback on the match.
 
 The bot only knows the MusicPlatform interface; everything platform-specific
 lives in the strategy classes registered in setup_hook.
@@ -28,6 +29,9 @@ log = logging.getLogger("clanky_cat")
 
 EMBED_COLOR = 0xE91E63
 NOT_FOUND = "NOT FOUND"
+FEEDBACK_GOOD = "👍"
+FEEDBACK_BAD = "👎"
+MAX_TRACKED_REPLIES = 500  # cap the feedback-tracking set so it can't grow forever
 
 
 class ClankyCat(discord.Client):
@@ -40,6 +44,7 @@ class ClankyCat(discord.Client):
         self._spotify_secret = spotify_secret
         self.http_session: aiohttp.ClientSession | None = None
         self.platforms: list[MusicPlatform] = []
+        self._reply_ids: dict[int, None] = {}  # insertion-ordered set of replies awaiting feedback
 
     async def setup_hook(self) -> None:
         self.http_session = aiohttp.ClientSession()
@@ -95,18 +100,36 @@ class ClankyCat(discord.Client):
         links = {p.key: url for p, url in zip(others, results)}
         links[source.key] = link.url
 
-        # Post the replacement first so the song is never lost if delete fails.
-        await message.channel.send(embed=self._build_embed(message, song, links))
-        try:
-            await message.delete()
-        except discord.Forbidden:
-            log.warning("Missing Manage Messages permission; could not delete original")
-        except discord.NotFound:
-            pass  # already deleted
+        reply = await message.reply(
+            embed=self._build_embed(song, links), mention_author=False
+        )
 
-    def _build_embed(
-        self, message: discord.Message, song: Song, links: dict[str, str | None]
-    ) -> discord.Embed:
+        self._reply_ids[reply.id] = None
+        while len(self._reply_ids) > MAX_TRACKED_REPLIES:
+            self._reply_ids.pop(next(iter(self._reply_ids)))
+
+        for emoji in (FEEDBACK_GOOD, FEEDBACK_BAD):
+            try:
+                await reply.add_reaction(emoji)
+            except discord.HTTPException:
+                log.warning("Could not seed %s reaction on reply %s", emoji, reply.id)
+
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
+        if (
+            payload.message_id not in self._reply_ids
+            or payload.user_id == (self.user.id if self.user else None)
+            or str(payload.emoji) not in (FEEDBACK_GOOD, FEEDBACK_BAD)
+        ):
+            return
+        verdict = "good" if str(payload.emoji) == FEEDBACK_GOOD else "bad"
+        log.info(
+            "Feedback on reply %s from user %s: %s match",
+            payload.message_id,
+            payload.user_id,
+            verdict,
+        )
+
+    def _build_embed(self, song: Song, links: dict[str, str | None]) -> discord.Embed:
         title = f"{song.title} — {song.artist}" if song.artist else song.title
         embed = discord.Embed(title=title, color=EMBED_COLOR)
         if song.thumbnail_url:
@@ -116,11 +139,6 @@ class ClankyCat(discord.Client):
             url = links.get(platform.key)
             value = f"[Listen]({url})" if url else NOT_FOUND
             embed.add_field(name=platform.label, value=value, inline=True)
-
-        embed.set_footer(
-            text=f"Shared by {message.author.display_name}",
-            icon_url=message.author.display_avatar.url,
-        )
         return embed
 
 
