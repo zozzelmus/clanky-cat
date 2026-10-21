@@ -5,6 +5,9 @@ registered platform, the bot replies to it with an embed listing the song on
 every platform (NOT FOUND where no match). The reply is seeded with 👍/👎
 reactions so users can give feedback on the match.
 
+TikTok and Instagram Reel links are handled separately: the video is
+downloaded as an mp4 and replied to the message as an attachment.
+
 The bot only knows the MusicPlatform interface; everything platform-specific
 lives in the strategy classes registered in setup_hook.
 """
@@ -23,6 +26,7 @@ from .apple import AppleMusicPlatform
 from .platform_base import LinkMatch, MusicPlatform
 from .song import Song
 from .spotify import SpotifyPlatform
+from .video import VideoDownloader, VideoError
 from .youtube import YouTubePlatform
 
 log = logging.getLogger("clanky_cat")
@@ -35,15 +39,23 @@ MAX_TRACKED_REPLIES = 500  # cap the feedback-tracking set so it can't grow fore
 
 
 class ClankyCat(discord.Client):
-    def __init__(self, channel_id: int, spotify_id: str | None, spotify_secret: str | None) -> None:
+    def __init__(
+        self,
+        channel_id: int,
+        spotify_id: str | None,
+        spotify_secret: str | None,
+        video_cookies_file: str | None = None,
+    ) -> None:
         intents = discord.Intents.default()
         intents.message_content = True  # required to read message text
         super().__init__(intents=intents)
         self.channel_id = channel_id
         self._spotify_id = spotify_id
         self._spotify_secret = spotify_secret
+        self._video_cookies_file = video_cookies_file
         self.http_session: aiohttp.ClientSession | None = None
         self.platforms: list[MusicPlatform] = []
+        self.videos: VideoDownloader | None = None
         self._reply_ids: dict[int, None] = {}  # insertion-ordered set of replies awaiting feedback
 
     async def setup_hook(self) -> None:
@@ -53,6 +65,7 @@ class ClankyCat(discord.Client):
             AppleMusicPlatform(self.http_session),
             YouTubePlatform(),
         ]
+        self.videos = VideoDownloader(cookies_file=self._video_cookies_file)
         for platform in self.platforms:
             if not platform.enabled:
                 log.warning(
@@ -79,7 +92,10 @@ class ClankyCat(discord.Client):
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot or message.channel.id != self.channel_id:
             return
+        await self._handle_music(message)
+        await self._handle_video(message)
 
+    async def _handle_music(self, message: discord.Message) -> None:
         matched = self._match_platform(message.content)
         if matched is None:
             return
@@ -113,6 +129,27 @@ class ClankyCat(discord.Client):
                 await reply.add_reaction(emoji)
             except discord.HTTPException:
                 log.warning("Could not seed %s reaction on reply %s", emoji, reply.id)
+
+    async def _handle_video(self, message: discord.Message) -> None:
+        link = self.videos.match(message.content) if self.videos else None
+        if link is None:
+            return
+
+        log.info("%s video from %s: %s", link.site, message.author, link.url)
+        max_bytes = message.guild.filesize_limit if message.guild else discord.utils.DEFAULT_FILE_SIZE_LIMIT_BYTES
+
+        try:
+            async with message.channel.typing():
+                async with self.videos.download(link, max_bytes) as path:
+                    # Open explicitly so the handle is closed before the temp dir is removed.
+                    with path.open("rb") as fp:
+                        await message.reply(
+                            file=discord.File(fp, filename=f"{link.site}.mp4"), mention_author=False
+                        )
+        except VideoError as exc:
+            log.warning("Could not repost %s, leaving message untouched: %s", link.url, exc)
+        except Exception:
+            log.exception("Could not repost %s, leaving message untouched", link.url)
 
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
         if (
@@ -155,6 +192,7 @@ def main() -> None:
         channel_id=int(channel_id),
         spotify_id=os.getenv("SPOTIFY_CLIENT_ID"),
         spotify_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
+        video_cookies_file=os.getenv("VIDEO_COOKIES_FILE") or None,
     )
     bot.run(token)
 

@@ -1,4 +1,6 @@
-discord.py>=2.4.0
+discord.py>=2.5.0  # 2.5 knows the 10 MB default upload limit
 aiohttp>=3.9.0
 python-dotenv>=1.0.0
 ytmusicapi>=1.8.0
+# curl-cffi lets yt-dlp impersonate a browser, which TikTok often requires.
+yt-dlp[default,curl-cffi]>=2026.8.19
