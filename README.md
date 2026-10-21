@@ -1,10 +1,11 @@
 # Clanky Cat
 
 Discord bot that watches one channel for music links. When someone posts a
-Spotify, Apple Music, or YouTube song link, the bot deletes their message and
-replaces it with an embed linking the song on **all three platforms**
-(crediting the original poster). Platforms where the song can't be matched
-show `NOT FOUND`.
+Spotify, Apple Music, or YouTube song link, the bot replies to their message
+with an embed linking the song on **all three platforms**. The original
+message is left in place. Platforms where the song can't be matched show
+`NOT FOUND`, and the reply carries 👍/👎 reactions so people can rate the
+match.
 
 Resolution is fully deterministic — no AI involved:
 
@@ -26,8 +27,14 @@ Resolution is fully deterministic — no AI involved:
 3. The other two platforms are searched concurrently. A result only counts
    if its title matches the source title (normalized containment or
    difflib similarity ≥ 0.6) — otherwise `NOT FOUND`.
-4. The embed is posted **before** the original message is deleted, so a
-   missing permission never loses the song.
+4. The bot replies to the original message with the embed (without pinging
+   the poster) and seeds it with 👍 and 👎 reactions. If a reaction can't be
+   added, a warning is logged and the reply stays.
+5. When someone clicks 👍 or 👎 on one of those replies, the vote is logged
+   at INFO level, e.g. `Feedback on reply <id> from user <id>: good match`.
+   Only the 500 most recent replies are tracked, in memory, so votes on
+   older replies or on replies from before a restart aren't logged. Removing
+   a vote isn't logged either.
 
 Links that don't identify a single track (playlists, album pages without a
 track, channels) are left untouched, as are messages the bot can't resolve
@@ -38,7 +45,10 @@ track, channels) are left untouched, as are messages the bot can't resolve
 1. **Create the Discord bot** at https://discord.com/developers/applications
    - Bot tab: enable the **Message Content Intent**, copy the token.
    - Invite it with the `bot` scope and these permissions:
-     **View Channel, Send Messages, Manage Messages, Embed Links**.
+     **View Channel, Send Messages, Read Message History, Embed Links,
+     Add Reactions**. (Discord requires Read Message History to reply to a
+     message or add a reaction to it. Manage Messages is not needed, since
+     the bot never deletes anything.)
 
 2. **Create a Spotify app** (free) at https://developer.spotify.com/dashboard
    and copy its Client ID and Client Secret. (Optional — without it,
