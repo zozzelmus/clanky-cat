@@ -3,7 +3,8 @@
 Watches one channel. When a message contains a song link recognized by any
 registered platform, the bot replies to it with an embed listing the song on
 every platform (NOT FOUND where no match). The reply is seeded with 👍/👎
-reactions so users can give feedback on the match.
+reactions so users can give feedback on the match; a 👎 files a GitHub issue
+(one per run, deduped by the run id shown in the embed footer).
 
 TikTok and Instagram Reel links are handled separately: the video is
 downloaded as an mp4 and replied to the message as an attachment.
@@ -23,6 +24,7 @@ import discord
 from dotenv import load_dotenv
 
 from .apple import AppleMusicPlatform
+from .issues import GitHubError, IssueReporter, Run, make_run_id
 from .platform_base import LinkMatch, MusicPlatform
 from .song import Song
 from .spotify import SpotifyPlatform
@@ -45,6 +47,8 @@ class ClankyCat(discord.Client):
         spotify_id: str | None,
         spotify_secret: str | None,
         video_cookies_file: str | None = None,
+        github_token: str | None = None,
+        github_repo: str | None = None,
     ) -> None:
         intents = discord.Intents.default()
         intents.message_content = True  # required to read message text
@@ -53,10 +57,13 @@ class ClankyCat(discord.Client):
         self._spotify_id = spotify_id
         self._spotify_secret = spotify_secret
         self._video_cookies_file = video_cookies_file
+        self._github_token = github_token
+        self._github_repo = github_repo
         self.http_session: aiohttp.ClientSession | None = None
         self.platforms: list[MusicPlatform] = []
         self.videos: VideoDownloader | None = None
-        self._reply_ids: dict[int, None] = {}  # insertion-ordered set of replies awaiting feedback
+        self.issues: IssueReporter | None = None
+        self._runs: dict[int, Run] = {}  # reply id -> run awaiting feedback, insertion-ordered
 
     async def setup_hook(self) -> None:
         self.http_session = aiohttp.ClientSession()
@@ -66,6 +73,9 @@ class ClankyCat(discord.Client):
             YouTubePlatform(),
         ]
         self.videos = VideoDownloader(cookies_file=self._video_cookies_file)
+        self.issues = IssueReporter(self.http_session, self._github_token, self._github_repo)
+        if not self.issues.enabled:
+            log.warning("GitHub issue reporting is disabled (set GITHUB_TOKEN and GITHUB_REPO)")
         for platform in self.platforms:
             if not platform.enabled:
                 log.warning(
@@ -103,7 +113,8 @@ class ClankyCat(discord.Client):
         if not source.enabled:
             return  # can't resolve the source song
 
-        log.info("%s link from %s: %s", source.key, message.author, link.url)
+        run_id = make_run_id(message.id, source.key, link.track_id)
+        log.info("Run %s: %s link from %s: %s", run_id, source.key, message.author, link.url)
 
         try:
             song = await source.get_song(link.track_id)
@@ -117,12 +128,19 @@ class ClankyCat(discord.Client):
         links[source.key] = link.url
 
         reply = await message.reply(
-            embed=self._build_embed(song, links), mention_author=False
+            embed=self._build_embed(song, links, run_id), mention_author=False
         )
 
-        self._reply_ids[reply.id] = None
-        while len(self._reply_ids) > MAX_TRACKED_REPLIES:
-            self._reply_ids.pop(next(iter(self._reply_ids)))
+        self._runs[reply.id] = Run(
+            run_id=run_id,
+            song=song,
+            source_label=source.label,
+            source_url=link.url,
+            results={p.label: links.get(p.key) for p in self.platforms},
+            message_url=message.jump_url,
+        )
+        while len(self._runs) > MAX_TRACKED_REPLIES:
+            self._runs.pop(next(iter(self._runs)))
 
         for emoji in (FEEDBACK_GOOD, FEEDBACK_BAD):
             try:
@@ -152,21 +170,29 @@ class ClankyCat(discord.Client):
             log.exception("Could not repost %s, leaving message untouched", link.url)
 
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
+        run = self._runs.get(payload.message_id)
         if (
-            payload.message_id not in self._reply_ids
+            run is None
             or payload.user_id == (self.user.id if self.user else None)
             or str(payload.emoji) not in (FEEDBACK_GOOD, FEEDBACK_BAD)
         ):
             return
         verdict = "good" if str(payload.emoji) == FEEDBACK_GOOD else "bad"
         log.info(
-            "Feedback on reply %s from user %s: %s match",
+            "Feedback on run %s (reply %s) from user %s: %s match",
+            run.run_id,
             payload.message_id,
             payload.user_id,
             verdict,
         )
+        if verdict == "bad" and self.issues is not None:
+            reporter = payload.member.display_name if payload.member else f"user {payload.user_id}"
+            try:
+                await self.issues.report_bad_match(run, reporter)
+            except (GitHubError, aiohttp.ClientError) as exc:
+                log.warning("Could not file GitHub issue for run %s: %s", run.run_id, exc)
 
-    def _build_embed(self, song: Song, links: dict[str, str | None]) -> discord.Embed:
+    def _build_embed(self, song: Song, links: dict[str, str | None], run_id: str) -> discord.Embed:
         title = f"{song.title} — {song.artist}" if song.artist else song.title
         embed = discord.Embed(title=title, color=EMBED_COLOR)
         if song.thumbnail_url:
@@ -176,6 +202,7 @@ class ClankyCat(discord.Client):
             url = links.get(platform.key)
             value = f"[Listen]({url})" if url else NOT_FOUND
             embed.add_field(name=platform.label, value=value, inline=True)
+        embed.set_footer(text=f"run {run_id}")
         return embed
 
 
@@ -193,6 +220,8 @@ def main() -> None:
         spotify_id=os.getenv("SPOTIFY_CLIENT_ID"),
         spotify_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
         video_cookies_file=os.getenv("VIDEO_COOKIES_FILE") or None,
+        github_token=os.getenv("GITHUB_TOKEN") or None,
+        github_repo=os.getenv("GITHUB_REPO") or None,
     )
     bot.run(token)
 
