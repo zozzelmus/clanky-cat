@@ -33,12 +33,22 @@ Resolution is fully deterministic — no AI involved:
    difflib similarity ≥ 0.6) — otherwise `NOT FOUND`.
 4. The bot replies to the original message with the embed (without pinging
    the poster) and seeds it with 👍 and 👎 reactions. If a reaction can't be
-   added, a warning is logged and the reply stays.
+   added, a warning is logged and the reply stays. The embed footer shows
+   the **run id** — a deterministic hash of the original message id and the
+   source track, so the same message always maps to the same id. Log lines
+   for the run carry it too.
 5. When someone clicks 👍 or 👎 on one of those replies, the vote is logged
-   at INFO level, e.g. `Feedback on reply <id> from user <id>: good match`.
-   Only the 500 most recent replies are tracked, in memory, so votes on
-   older replies or on replies from before a restart aren't logged. Removing
-   a vote isn't logged either.
+   at INFO level, e.g. `Feedback on run <run id> (reply <id>) from user <id>:
+   good match`. Only the 500 most recent replies are tracked, in memory, so
+   votes on older replies or on replies from before a restart are ignored.
+   Removing a vote isn't logged either.
+6. A 👎 also files a GitHub issue (if `GITHUB_TOKEN` and `GITHUB_REPO` are
+   set) with the song, the source link, each platform's result, and the run
+   id. There is at most one issue per run: further 👎s on the same reply
+   reuse it. Dedupe is an in-memory run id → issue cache behind a lock (so
+   simultaneous 👎s can't race), backed by a GitHub issue search for the run
+   id before creating (so a restart doesn't duplicate). If GitHub is
+   unreachable, a warning is logged and the next 👎 on that reply retries.
 
 Links that don't identify a single track (playlists, album pages without a
 track, channels) are left untouched, as are messages the bot can't resolve
@@ -85,6 +95,11 @@ frequent releases — if downloads start failing, update it first:
 
    Fill in `DISCORD_TOKEN`, `CHANNEL_ID` (enable Developer Mode in Discord,
    right-click the channel → Copy Channel ID), and the Spotify credentials.
+
+   To file GitHub issues on 👎 (optional), create a fine-grained token at
+   https://github.com/settings/personal-access-tokens with **Issues: Read
+   and write** on the target repo, then set `GITHUB_TOKEN` and
+   `GITHUB_REPO` (`owner/name`).
 
    Instagram frequently blocks anonymous Reel downloads. If they fail, export
    cookies from a browser logged in to Instagram (Netscape `cookies.txt`
@@ -134,6 +149,7 @@ file plus one entry in the registry in `bot.py`'s `setup_hook`.
 - `clanky_cat/apple.py` — iTunes Lookup/Search API strategy
 - `clanky_cat/youtube.py` — ytmusicapi strategy (runs in a worker thread)
 - `clanky_cat/video.py` — TikTok / Instagram Reel downloader (yt-dlp + ffmpeg)
+- `clanky_cat/issues.py` — run ids + deduped GitHub issue filing for 👎 feedback
 
 ## Roadmap
 
