@@ -4,3 +4,7 @@ services:
     container_name: clanky-cat
     env_file: .env
     restart: unless-stopped
+    # To use a cookies file for Instagram, uncomment and set
+    # VIDEO_COOKIES_FILE=/app/cookies.txt in .env:
+    # volumes:
+    #   - ./cookies.txt:/app/cookies.txt
