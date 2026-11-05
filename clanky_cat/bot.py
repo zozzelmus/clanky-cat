@@ -1,13 +1,14 @@
 """Clanky Cat — Discord bot that adds a cross-platform embed to music links.
 
-Watches one channel. When a message contains a song link recognized by any
-registered platform, the bot replies to it with an embed listing the song on
+Music links are only handled in one channel (CHANNEL_ID). When a message
+there contains a song link recognized by any registered platform, the bot replies to it with an embed listing the song on
 every platform (NOT FOUND where no match). The reply is seeded with 👍/👎
 reactions so users can give feedback on the match; a 👎 files a GitHub issue
 (one per run, deduped by the run id shown in the embed footer).
 
-TikTok and Instagram Reel links are handled separately: the video is
-downloaded as an mp4 and replied to the message as an attachment.
+TikTok and Instagram Reel links are handled separately, in every channel the
+bot can read: the video is downloaded as an mp4 and replied to the message
+as an attachment.
 
 The bot only knows the MusicPlatform interface; everything platform-specific
 lives in the strategy classes registered in setup_hook.
@@ -90,7 +91,11 @@ class ClankyCat(discord.Client):
         await super().close()
 
     async def on_ready(self) -> None:
-        log.info("Logged in as %s, watching channel %s", self.user, self.channel_id)
+        log.info(
+            "Logged in as %s: music links in channel %s, video links in every channel",
+            self.user,
+            self.channel_id,
+        )
 
     def _match_platform(self, text: str) -> tuple[MusicPlatform, LinkMatch] | None:
         for platform in self.platforms:
@@ -100,10 +105,11 @@ class ClankyCat(discord.Client):
         return None
 
     async def on_message(self, message: discord.Message) -> None:
-        if message.author.bot or message.channel.id != self.channel_id:
+        if message.author.bot:
             return
-        await self._handle_music(message)
-        await self._handle_video(message)
+        if message.channel.id == self.channel_id:
+            await self._handle_music(message)
+        await self._handle_video(message)  # videos are reposted in every channel
 
     async def _handle_music(self, message: discord.Message) -> None:
         matched = self._match_platform(message.content)
