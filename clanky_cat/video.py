@@ -1,4 +1,4 @@
-"""Short-form video reposting — TikTok videos and Instagram Reels via yt-dlp.
+"""Short-form video reposting — TikTok, Instagram Reels, X and YouTube Shorts via yt-dlp.
 
 The video is downloaded as an mp4 (H.264 preferred, so Discord plays it
 inline) into a throwaway temp directory. If it's bigger than the upload
@@ -7,7 +7,8 @@ file the download is rejected with VideoTooLargeError.
 
 ffmpeg is optional but strongly recommended: without it yt-dlp can't merge
 separate video/audio streams (common on Instagram) and oversized videos
-can't be shrunk.
+can't be shrunk. YouTube also needs a JavaScript runtime (Deno, installed
+by the yt-dlp[deno] extra in requirements.txt).
 
 yt-dlp is synchronous, so all work is pushed to a worker thread.
 """
@@ -40,6 +41,18 @@ _SITES: dict[str, re.Pattern[str]] = {
     # instagram.com/reel/<code>, /reels/<code>, /<user>/reel/<code>
     "instagram": re.compile(
         r"https?://(?:www\.)?instagram\.com/(?:[\w.]+/)?reels?/[A-Za-z0-9_-]+[^\s<>]*",
+        re.IGNORECASE,
+    ),
+    # x.com / twitter.com /<user>/status/<id> (also /i/status/<id>). Tweets
+    # without a video fail in yt-dlp and are left untouched like any failure.
+    "x": re.compile(
+        r"https?://(?:(?:www|mobile)\.)?(?:x|twitter)\.com/(?:\w+|i(?:/web)?)/status/\d+[^\s<>]*",
+        re.IGNORECASE,
+    ),
+    # youtube.com/shorts/<id> only. Regular watch / youtu.be links are music
+    # links (see youtube.py), so they are deliberately not reposted.
+    "youtube": re.compile(
+        r"https?://(?:(?:www|m)\.)?youtube\.com/shorts/[A-Za-z0-9_-]{6,}[^\s<>]*",
         re.IGNORECASE,
     ),
 }

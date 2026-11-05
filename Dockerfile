@@ -1,6 +1,7 @@
 FROM python:3.12-slim
 
-# ffmpeg merges/re-encodes TikTok and Instagram videos to Discord-friendly mp4s.
+# ffmpeg merges/re-encodes reposted videos (TikTok, Instagram, X, YouTube Shorts)
+# to Discord-friendly mp4s.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*

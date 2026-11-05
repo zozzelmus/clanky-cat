@@ -6,7 +6,7 @@ every platform (NOT FOUND where no match). The reply is seeded with 👍/👎
 reactions so users can give feedback on the match; a 👎 files a GitHub issue
 (one per run, deduped by the run id shown in the embed footer).
 
-TikTok and Instagram Reel links are handled separately, in every channel the
+TikTok, Instagram Reel, X and YouTube Shorts links are handled separately, in every channel the
 bot can read: the video is downloaded as an mp4 and replied to the message
 as an attachment.
 
