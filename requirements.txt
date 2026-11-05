@@ -3,4 +3,5 @@ aiohttp>=3.9.0
 python-dotenv>=1.0.0
 ytmusicapi>=1.8.0
 # curl-cffi lets yt-dlp impersonate a browser, which TikTok often requires.
-yt-dlp[default,curl-cffi]>=2026.8.19
+# deno is the JavaScript runtime yt-dlp needs to download from YouTube.
+yt-dlp[default,curl-cffi,deno]>=2026.8.19
