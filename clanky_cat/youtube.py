@@ -83,8 +83,8 @@ class YouTubePlatform(MusicPlatform):
                 return f"https://www.youtube.com/watch?v={item['videoId']}"
         return None
 
-    async def get_song(self, track_id: str) -> Song:
-        return await asyncio.to_thread(self._get_song_sync, track_id)
+    async def get_song(self, link: LinkMatch) -> Song:
+        return await asyncio.to_thread(self._get_song_sync, link.track_id)
 
     async def search(self, song: Song) -> str | None:
         try:

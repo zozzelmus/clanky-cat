@@ -31,7 +31,12 @@ Resolution is fully deterministic — no AI involved:
 2. Title + artist are fetched from the source platform.
 3. The other two platforms are searched concurrently. A result only counts
    if its title matches the source title (normalized containment or
-   difflib similarity ≥ 0.6) — otherwise `NOT FOUND`.
+   difflib similarity ≥ 0.6) — otherwise `NOT FOUND`. Normalization is
+   Unicode-aware, so non-Latin titles (e.g. Japanese) match each other;
+   a native-script title won't match its romanization, though.
+   Apple Music is per-country: a link is looked up in the storefront its
+   URL names (`/jp/` → Japan), and searches try each storefront in
+   `APPLE_MUSIC_STOREFRONTS` (default `us,jp`) until one has a match.
 4. The bot replies to the original message with the embed (without pinging
    the poster) and seeds it with 👍 and 👎 reactions. If a reaction can't be
    added, a warning is logged and the reply stays. The embed footer shows
@@ -105,6 +110,10 @@ frequent releases — if downloads start failing, update it first:
    https://github.com/settings/personal-access-tokens with **Issues: Read
    and write** on the target repo, then set `GITHUB_TOKEN` and
    `GITHUB_REPO` (`owner/name`).
+
+   Apple Music search covers the US and Japan storefronts by default. Set
+   `APPLE_MUSIC_STOREFRONTS` (comma-separated country codes, searched in
+   order) to change that, e.g. `us,jp,kr`.
 
    Instagram frequently blocks anonymous Reel downloads. If they fail, export
    cookies from a browser logged in to Instagram (Netscape `cookies.txt`

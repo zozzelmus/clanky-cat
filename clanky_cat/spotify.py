@@ -75,10 +75,10 @@ class SpotifyPlatform(MusicPlatform):
                 raise SpotifyError(f"GET {path} failed: HTTP {resp.status}")
             return await resp.json()
 
-    async def get_song(self, track_id: str) -> Song:
+    async def get_song(self, link: LinkMatch) -> Song:
         if not self.enabled:
             raise SpotifyError("Spotify credentials not configured")
-        data = await self._get(f"/tracks/{track_id}", {})
+        data = await self._get(f"/tracks/{link.track_id}", {})
         images = data.get("album", {}).get("images", [])
         return Song(
             title=data["name"],

@@ -15,10 +15,15 @@ from .song import Song
 
 @dataclass(frozen=True)
 class LinkMatch:
-    """A recognized song link: the URL as posted plus the platform's track id."""
+    """A recognized song link: the URL as posted plus the platform's track id.
+
+    *region* is the storefront/country the link points at (e.g. "jp" for
+    music.apple.com/jp/...), for platforms whose catalogs differ by region.
+    """
 
     url: str
     track_id: str
+    region: str | None = None
 
 
 class MusicPlatform(ABC):
@@ -35,8 +40,8 @@ class MusicPlatform(ABC):
         """
 
     @abstractmethod
-    async def get_song(self, track_id: str) -> Song:
-        """Metadata for one of this platform's track ids. Raises on failure."""
+    async def get_song(self, link: LinkMatch) -> Song:
+        """Metadata for a link this platform matched. Raises on failure."""
 
     @abstractmethod
     async def search(self, song: Song) -> str | None:

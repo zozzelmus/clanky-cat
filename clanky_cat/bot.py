@@ -24,7 +24,7 @@ import aiohttp
 import discord
 from dotenv import load_dotenv
 
-from .apple import AppleMusicPlatform
+from .apple import DEFAULT_STOREFRONTS, AppleMusicPlatform
 from .issues import GitHubError, IssueReporter, Run, make_run_id
 from .platform_base import LinkMatch, MusicPlatform
 from .song import Song
@@ -50,6 +50,7 @@ class ClankyCat(discord.Client):
         video_cookies_file: str | None = None,
         github_token: str | None = None,
         github_repo: str | None = None,
+        apple_storefronts: list[str] | None = None,
     ) -> None:
         intents = discord.Intents.default()
         intents.message_content = True  # required to read message text
@@ -60,6 +61,7 @@ class ClankyCat(discord.Client):
         self._video_cookies_file = video_cookies_file
         self._github_token = github_token
         self._github_repo = github_repo
+        self._apple_storefronts = apple_storefronts or list(DEFAULT_STOREFRONTS)
         self.http_session: aiohttp.ClientSession | None = None
         self.platforms: list[MusicPlatform] = []
         self.videos: VideoDownloader | None = None
@@ -70,7 +72,7 @@ class ClankyCat(discord.Client):
         self.http_session = aiohttp.ClientSession()
         self.platforms = [
             SpotifyPlatform(self.http_session, self._spotify_id, self._spotify_secret),
-            AppleMusicPlatform(self.http_session),
+            AppleMusicPlatform(self.http_session, self._apple_storefronts),
             YouTubePlatform(),
         ]
         self.videos = VideoDownloader(cookies_file=self._video_cookies_file)
@@ -123,7 +125,7 @@ class ClankyCat(discord.Client):
         log.info("Run %s: %s link from %s: %s", run_id, source.key, message.author, link.url)
 
         try:
-            song = await source.get_song(link.track_id)
+            song = await source.get_song(link)
         except Exception:
             log.exception("Could not resolve %s, leaving message untouched", link.url)
             return
@@ -228,6 +230,10 @@ def main() -> None:
         video_cookies_file=os.getenv("VIDEO_COOKIES_FILE") or None,
         github_token=os.getenv("GITHUB_TOKEN") or None,
         github_repo=os.getenv("GITHUB_REPO") or None,
+        apple_storefronts=[
+            s.strip() for s in os.getenv("APPLE_MUSIC_STOREFRONTS", "").split(",") if s.strip()
+        ]
+        or None,
     )
     bot.run(token)
 

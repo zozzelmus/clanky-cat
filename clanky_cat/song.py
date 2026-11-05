@@ -19,14 +19,19 @@ class Song:
         return f"{self.artist} {self.title}" if self.artist else self.title
 
 
-_PARENTHETICAL = re.compile(r"[\(\[][^\)\]]*[\)\]]")  # (Official Video), [Remaster], ...
-_NON_ALNUM = re.compile(r"[^a-z0-9 ]+")
+_PARENTHETICAL = re.compile(r"[\(\[【][^\)\]】]*[\)\]】]")  # (Official Video), [Remaster], 【MV】, ...
+_NON_WORD = re.compile(r"[\W_]+")  # Unicode-aware: keeps letters/digits of any script
+_LATIN_DIACRITICS = re.compile(r"[\u0300-\u036f]")
 
 
 def _normalize(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    # NFKD folds full-width forms (Ｂｅａｔ, （）) to ASCII and splits accents off
+    # Latin letters so "Beyoncé" == "Beyonce". Only the Latin combining block is
+    # dropped: Japanese dakuten (が = か + U+3099) must survive, so NFC re-joins them.
+    text = unicodedata.normalize("NFKD", text)
+    text = unicodedata.normalize("NFC", _LATIN_DIACRITICS.sub("", text))
     text = _PARENTHETICAL.sub(" ", text.lower())
-    text = _NON_ALNUM.sub(" ", text)
+    text = _NON_WORD.sub(" ", text)
     return " ".join(text.split())
 
 
