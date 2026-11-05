@@ -7,9 +7,10 @@ message is left in place. Platforms where the song can't be matched show
 `NOT FOUND`, and the reply carries 👍/👎 reactions so people can rate the
 match.
 
-It also reposts **TikTok videos and Instagram Reels**: the video is
-downloaded as an mp4 and replied to the message as an attachment, so it
-plays directly in Discord.
+It also reposts **TikTok videos and Instagram Reels** in **every channel**
+it can see (not just the music channel): the video is downloaded as an mp4
+and replied to the message as an attachment, so it plays directly in
+Discord.
 
 Resolution is fully deterministic — no AI involved:
 
@@ -56,7 +57,8 @@ track, channels) are left untouched, as are messages the bot can't resolve
 
 ## How a video link is handled
 
-1. A message in the watched channel is scanned for the first TikTok video
+1. A non-bot message in **any** channel the bot can read (text channels,
+   threads, DMs) is scanned for the first TikTok video
    (`tiktok.com/@user/video/…`, `vm.tiktok.com/…`, `tiktok.com/t/…`) or
    Instagram Reel (`instagram.com/reel/…`) link.
 2. [yt-dlp](https://github.com/yt-dlp/yt-dlp) downloads it as an mp4,
@@ -95,6 +97,9 @@ frequent releases — if downloads start failing, update it first:
 
    Fill in `DISCORD_TOKEN`, `CHANNEL_ID` (enable Developer Mode in Discord,
    right-click the channel → Copy Channel ID), and the Spotify credentials.
+   `CHANNEL_ID` only scopes the music embeds — TikTok/Reel reposting works in
+   every channel where the bot has View Channel, Send Messages, Read Message
+   History and Attach Files.
 
    To file GitHub issues on 👎 (optional), create a fine-grained token at
    https://github.com/settings/personal-access-tokens with **Issues: Read
